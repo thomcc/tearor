@@ -8,6 +8,7 @@ keywords = ["cell", "threads", "mistakes", "tearing", "torn"]
 repository = "https://github.com/thomcc/tearor"
 readme = "README.md"
 description = "Easily turn data races into data corruption!"
+license = "CC0-1.0"
 
 [dependencies]
 bytemuck = "1"
