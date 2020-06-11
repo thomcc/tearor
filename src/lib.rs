@@ -148,10 +148,12 @@ impl<T: Pod> TearCell<T> {
     pub fn load(&self) -> T {
         if size_of::<T>() == 0 {
             T::zeroed()
-        } else if tearcell_can_use_atom::<T, AtomicUsize>() {
-            self.do_load::<AtomicUsize>()
+        } else if tearcell_can_use_atom::<T, AtomicU64>() {
+            self.do_load::<AtomicU64>()
         } else if tearcell_can_use_atom::<T, AtomicU32>() {
             self.do_load::<AtomicU32>()
+        } else if tearcell_can_use_atom::<T, AtomicU16>() {
+            self.do_load::<AtomicU16>()
         } else if tearcell_can_use_atom::<T, AtomicU8>() {
             self.do_load::<AtomicU8>()
         } else {
@@ -166,10 +168,12 @@ impl<T: Pod> TearCell<T> {
     pub fn store_ref(&self, value: &T) {
         if size_of::<T>() == 0 {
             return;
-        } else if tearcell_can_use_atom::<T, AtomicUsize>() {
-            self.do_store::<AtomicUsize>(value);
+        } else if tearcell_can_use_atom::<T, AtomicU64>() {
+            self.do_store::<AtomicU64>(value)
         } else if tearcell_can_use_atom::<T, AtomicU32>() {
             self.do_store::<AtomicU32>(value)
+        } else if tearcell_can_use_atom::<T, AtomicU16>() {
+            self.do_store::<AtomicU16>(value)
         } else if tearcell_can_use_atom::<T, AtomicU8>() {
             self.do_store::<AtomicU8>(value)
         } else {
@@ -215,48 +219,26 @@ unsafe trait Atom: Sync + Send + 'static + Sized {
     fn get(&self) -> Self::Prim;
     fn set(&self, p: Self::Prim);
 }
-
-unsafe impl Atom for AtomicUsize {
-    type Prim = usize;
-
-    #[inline(always)]
-    fn get(&self) -> Self::Prim {
-        self.load(Ordering::Relaxed)
-    }
-
-    #[inline(always)]
-    fn set(&self, v: Self::Prim) {
-        self.store(v, Ordering::Relaxed);
-    }
+macro_rules! def_atom {
+    ($Atom:ty, $prim:ty) => {
+        unsafe impl Atom for $Atom {
+            type Prim = $prim;
+            #[inline]
+            fn get(&self) -> Self::Prim {
+                self.load(Ordering::Relaxed)
+            }
+            #[inline]
+            fn set(&self, v: Self::Prim) {
+                self.store(v, Ordering::Relaxed);
+            }
+        }
+    };
 }
-
-unsafe impl Atom for AtomicU32 {
-    type Prim = u32;
-
-    #[inline(always)]
-    fn get(&self) -> Self::Prim {
-        self.load(Ordering::Relaxed)
-    }
-
-    #[inline(always)]
-    fn set(&self, v: Self::Prim) {
-        self.store(v, Ordering::Relaxed);
-    }
-}
-
-unsafe impl Atom for AtomicU8 {
-    type Prim = u8;
-
-    #[inline(always)]
-    fn get(&self) -> Self::Prim {
-        self.load(Ordering::Relaxed)
-    }
-
-    #[inline(always)]
-    fn set(&self, v: Self::Prim) {
-        self.store(v, Ordering::Relaxed);
-    }
-}
+def_atom!(AtomicU64, u64);
+// def_atom!(AtomicUsize, usize);
+def_atom!(AtomicU32, u32);
+def_atom!(AtomicU16, u16);
+def_atom!(AtomicU8, u8);
 
 // Don't bother with u16/u32/etc -- we're only bothering with u8 because we
 // can't statically prevent it.
@@ -264,8 +246,9 @@ unsafe impl Atom for AtomicU8 {
 #[cfg(test)]
 mod test {
     use super::*;
+    use core::convert::*;
     #[test]
-    fn test_various() {
+    fn test_basic() {
         let v: TearCell<[u8; 0]> = TearCell::new([]);
         assert_eq!(v.load(), []);
         v.store([]);
@@ -287,51 +270,45 @@ mod test {
         assert_eq!(v.load(), [1]);
         v.store_ref(&[2]);
         assert_eq!(v.load(), [2]);
-
-        macro_rules! test_arr {
-            ($t:ident; $n:expr) => {
-                do_test_plain::<$t, [$t; $n]>();
-            };
-        }
-
-        test_arr![u8; 2];
-        test_arr![u8; 3];
-        test_arr![u8; 4];
-        test_arr![u8; 5];
-        test_arr![u8; 6];
-        test_arr![u8; 7];
-        test_arr![u8; 8];
-        test_arr![u8; 9];
-
-        test_arr![u8; 10];
-        test_arr![u8; 11];
-        test_arr![u8; 12];
-        test_arr![u8; 13];
-        test_arr![u8; 14];
-        test_arr![u8; 15];
-        test_arr![u8; 16];
-
-        test_arr![usize; 2];
-        test_arr![usize; 3];
-        test_arr![usize; 4];
-        test_arr![usize; 5];
-        test_arr![usize; 6];
-        test_arr![usize; 7];
-        test_arr![usize; 8];
-        test_arr![usize; 9];
-
-        test_arr![usize; 10];
-        test_arr![usize; 11];
-        test_arr![usize; 12];
-        test_arr![usize; 13];
-        test_arr![usize; 14];
-        test_arr![usize; 15];
-        test_arr![usize; 16];
+    }
+    macro_rules! test_arr {
+        ($($n:expr),+) => {$(
+            do_test_arr::<u8, [u8; $n]>();
+            do_test_arr::<u16, [u16; $n]>();
+            do_test_arr::<u32, [u32; $n]>();
+            do_test_arr::<u64, [u64; $n]>();
+            do_test_arr::<usize, [usize; $n]>();
+            do_test_arr::<u128, [u128; $n]>();
+        )+};
     }
 
-    use core::convert::*;
+    #[test]
+    fn test_many() {
+        test_arr![2, 3, 4, 5, 6, 7, 8, 9, 10];
+        // slows down compile lots..
+        //  11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+        //     26, 27, 28, 29, 30, 31, 32
+    }
 
-    fn do_test_plain<T, Arr>()
+    #[test]
+    fn test_overaligned() {
+        #[derive(Copy, Clone, PartialEq, Default, Debug)]
+        #[repr(C, align(16))]
+        struct Overaligned([u8; 16]);
+
+        unsafe impl bytemuck::Zeroable for Overaligned {}
+        unsafe impl bytemuck::Pod for Overaligned {}
+
+        impl AsRef<[u8]> for Overaligned {
+            fn as_ref(&self) -> &[u8] {
+                &self.0
+            }
+        }
+
+        do_test::<u8, Overaligned>(16, move |s: &[u8]| Overaligned(s.try_into().unwrap()));
+    }
+
+    fn do_test_arr<T, Arr>()
     where
         T: Copy + From<u8> + Default + core::ops::Not<Output = T> + PartialEq + core::fmt::Debug,
         Arr: Pod + AsRef<[T]> + PartialEq + core::fmt::Debug,
@@ -346,7 +323,6 @@ mod test {
     where
         T: Copy + From<u8> + Default + core::ops::Not<Output = T> + PartialEq + core::fmt::Debug,
         Arr: Pod + AsRef<[T]> + PartialEq + core::fmt::Debug,
-        // for<'a> Arr: TryFrom<&'a [T]>,
     {
         let mut v0 = alloc::vec![Default::default(); size];
         let a0: Arr = make(&v0);
