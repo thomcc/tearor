@@ -1,0 +1,9 @@
+[package]
+name = "tearor"
+version = "0.1.0"
+authors = ["Thom Chiovoloni <tchiovoloni@mozilla.com>"]
+edition = "2018"
+
+[dependencies]
+bytemuck = "1"
+
