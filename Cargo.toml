@@ -5,7 +5,7 @@ authors = ["Thom Chiovoloni <tchiovoloni@mozilla.com>"]
 edition = "2018"
 categories = ["rust-patterns", "no-std"]
 keywords = ["cell", "threads", "mistakes", "tearing", "torn"]
-repostory = "https://github.com/thomcc/tearor"
+repository = "https://github.com/thomcc/tearor"
 readme = "README.md"
 description = "Easily turn data races into data corruption!"
 
