@@ -191,15 +191,26 @@ impl<T: Pod> TearCell<T> {
 
     #[inline]
     fn do_load<A: Atom>(&self) -> T {
-        let mut result = T::zeroed();
+        use core::mem::MaybeUninit;
+        let mut result: MaybeUninit<T> = MaybeUninit::uninit();
         let src: &[A] = self.atom_slice();
-        let dst: &mut [A::Prim] =
-            bytemuck::try_cast_slice_mut(core::slice::from_mut(&mut result)).unwrap();
+
+        let dst: &mut [MaybeUninit<A::Prim>] = unsafe {
+            core::slice::from_raw_parts_mut(
+                result.as_mut_ptr() as *mut MaybeUninit<A::Prim>,
+                size_of::<T>() / size_of::<A::Prim>(),
+            )
+        };
+        assert_eq!(dst.len() * size_of::<A::Prim>(), size_of::<T>());
+
         assert_eq!(src.len(), dst.len());
         for (db, sb) in dst.iter_mut().zip(src.iter()) {
-            *db = sb.get();
+            // MaybeUninit::write() is unstable...
+            unsafe {
+                db.as_mut_ptr().write(sb.get());
+            }
         }
-        result
+        unsafe { result.assume_init() }
     }
 
     #[inline]
